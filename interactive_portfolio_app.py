@@ -691,8 +691,34 @@ def display_fundamental_results(system):
             else:
                 st.info(f"⚠️ {name} 暂无筛选结果")
         else:
-            st.write(f"**{name} 筛选结果**")
-            st.info(f"⚠️ {name} 暂无筛选结果或筛选失败")
+            # 如果没有筛选结果，尝试从投资组合中获取建议的标的
+            if hasattr(system, 'portfolio') and system.portfolio and 'assets' in system.portfolio:
+                portfolio_assets = system.portfolio['assets'].get(asset_class, [])
+                if portfolio_assets:
+                    st.write(f"**{name} 投资组合建议 ({len(portfolio_assets)} 个标的)**")
+                    
+                    # 从投资组合中提取标的信息
+                    result_data = []
+                    for asset in portfolio_assets:
+                        result_data.append({
+                            '代码': asset.get('ticker', 'N/A'),
+                            '名称': asset.get('name', asset.get('ticker', 'N/A')),
+                            '权重': f"{asset.get('weight', 0):.1f}%" if 'weight' in asset else 'N/A',
+                            '金额': f"${asset.get('amount', 0):,.2f}" if 'amount' in asset else 'N/A',
+                            '状态': '💼 投资组合推荐'
+                        })
+                    
+                    if result_data:
+                        df = pd.DataFrame(result_data)
+                        st.dataframe(df, use_container_width=True)
+                    else:
+                        st.info(f"💡 {name} 暂无投资组合建议")
+                else:
+                    st.write(f"**{name} 筛选结果**")
+                    st.info(f"💡 {name} 暂无筛选结果，建议先运行基本面分析")
+            else:
+                st.write(f"**{name} 筛选结果**")
+                st.info(f"💡 {name} 暂无筛选结果，建议先运行基本面分析")
         
         st.divider()
     
@@ -735,12 +761,12 @@ def display_technical_signals(technical_manager):
         'golds': '黄金'
     }
     
-    # 获取所有资产类别的标的列表
+    # 获取所有资产类别的标的列表（确保唯一性）
     all_tickers = {
         'equities': ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA', 'META', 'NFLX', 'JPM', 'JNJ', 'V', 'PG', 'UNH', 'HD', 'MA'],
         'bonds': ['TLT', 'IEF', 'SHY', 'AGG', 'BND', 'VCIT', 'VCSH', 'LQD', 'HYG', 'JNK', 'BNDX', 'VWOB', 'EMB', 'PCY', 'LEMB'],
         'commodities': ['DIA', 'SPY', 'QQQ', 'IWM', 'GLD', 'SLV', 'USO', 'UNG', 'DBA', 'DBC', 'XLE', 'XLF', 'XLK', 'XLV', 'XLI'],
-        'golds': ['GLD', 'IAU', 'SGOL', 'GLDM', 'BAR', 'OUNZ', 'GLTR', 'AAAU', 'GLDE', 'BGLD', 'XAUUSD=X', 'GC=F', 'GLD', 'IAU', 'SGOL']
+        'golds': ['GLD', 'IAU', 'SGOL', 'GLDM', 'BAR', 'OUNZ', 'GLTR', 'AAAU', 'GLDE', 'BGLD', 'XAUUSD=X', 'GC=F']
     }
     
     for asset_class, tickers in all_tickers.items():
@@ -750,15 +776,20 @@ def display_technical_signals(technical_manager):
         # 获取该资产类别的技术分析信号
         signals = technical_manager.all_signals.get(asset_class, {})
         
-        # 为每个标的创建技术分析结果
+        # 为每个标的创建技术分析结果（确保唯一性）
         analysis_results = []
+        processed_tickers = set()  # 用于跟踪已处理的标的
+        
         for ticker in tickers:
+            if ticker in processed_tickers:
+                continue  # 跳过已处理的标的
+                
             if ticker in signals:
                 # 有明确信号的情况
                 signal = signals[ticker]
                 analysis_results.append({
                     '代码': ticker,
-                    '策略': signal.get('strategy', 'N/A'),
+                    '策略': signal.get('strategy', '综合技术指标'),
                     '信号': signal.get('signal', 'WATCH'),
                     '置信度': f"{signal.get('confidence', 0):.1%}",
                     '建议': signal.get('recommendation', '建议观望，一周内买入'),
@@ -776,6 +807,8 @@ def display_technical_signals(technical_manager):
                     '价格': 'N/A',
                     '状态': '🟡 观望中'
                 })
+            
+            processed_tickers.add(ticker)  # 标记为已处理
         
         if analysis_results:
             df = pd.DataFrame(analysis_results)
