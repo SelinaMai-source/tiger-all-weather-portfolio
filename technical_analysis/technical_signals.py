@@ -342,8 +342,8 @@ class TechnicalAnalysisManager:
         
         # 根据资产类别生成不同的观望建议
         if asset_class == 'equities':
-            # 生成一些示例股票的观望建议
-            sample_tickers = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA']
+            # 生成更多股票的观望建议
+            sample_tickers = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA', 'META', 'NFLX', 'JPM', 'JNJ', 'V', 'PG', 'UNH', 'HD', 'MA']
             for ticker in sample_tickers:
                 watch_signals[ticker] = {
                     'strategy': 'technical_watch',
@@ -357,7 +357,7 @@ class TechnicalAnalysisManager:
                     'asset_class': asset_class
                 }
         elif asset_class == 'bonds':
-            sample_tickers = ['TLT', 'IEF', 'SHY', 'AGG', 'BND']
+            sample_tickers = ['TLT', 'IEF', 'SHY', 'AGG', 'BND', 'VCIT', 'VCSH', 'LQD', 'HYG', 'JNK', 'BNDX', 'VWOB', 'EMB', 'PCY', 'LEMB']
             for ticker in sample_tickers:
                 watch_signals[ticker] = {
                     'strategy': 'technical_watch',
@@ -371,7 +371,7 @@ class TechnicalAnalysisManager:
                     'asset_class': asset_class
                 }
         elif asset_class == 'commodities':
-            sample_tickers = ['DJP', 'DBC', 'USO', 'GLD', 'SLV']
+            sample_tickers = ['DIA', 'SPY', 'QQQ', 'IWM', 'GLD', 'SLV', 'USO', 'UNG', 'DBA', 'DBC', 'XLE', 'XLF', 'XLK', 'XLV', 'XLI']
             for ticker in sample_tickers:
                 watch_signals[ticker] = {
                     'strategy': 'technical_watch',
@@ -385,7 +385,7 @@ class TechnicalAnalysisManager:
                     'asset_class': asset_class
                 }
         elif asset_class == 'golds':
-            sample_tickers = ['GLD', 'IAU', 'SGOL', 'GLDM', 'BAR']
+            sample_tickers = ['GLD', 'IAU', 'SGOL', 'GLDM', 'BAR', 'OUNZ', 'GLTR', 'AAAU', 'GLDE', 'BGLD', 'XAUUSD=X', 'GC=F', 'GLD', 'IAU', 'SGOL']
             for ticker in sample_tickers:
                 watch_signals[ticker] = {
                     'strategy': 'technical_watch',

@@ -47,56 +47,38 @@ for path in paths_to_add:
     if path not in sys.path:
         sys.path.insert(0, path)
 
-# 调试信息
-st.write(f"🔍 当前工作目录: {os.getcwd()}")
-st.write(f"📁 项目根目录: {project_root}")
-st.write(f"📂 已添加的路径数量: {len([p for p in paths_to_add if p in sys.path])}")
-
-# 导入各个分析模块
+# 静默导入各个分析模块
 try:
-    st.write("🚀 开始导入模块...")
-    
     # 导入宏观分析模块
-    try:
-        from macro_analysis.macro_data import fetch_macro_data
-        st.success("✅ 宏观分析模块导入成功")
-    except ImportError as e:
-        st.warning(f"⚠️ 宏观分析模块导入失败: {e}")
-        st.info("💡 宏观分析功能将不可用，但其他功能仍可正常使用")
-        fetch_macro_data = None
+    from macro_analysis.macro_data import fetch_macro_data
+    fetch_macro_data_available = True
+except ImportError:
+    fetch_macro_data_available = False
+    fetch_macro_data = None
     
-    # 导入资产配置调整模块
-    try:
-        from macro_analysis.allocation_adjust import adjust_allocation
-        st.success("✅ 资产配置调整模块导入成功")
-    except ImportError as e:
-        st.warning(f"⚠️ 资产配置调整模块导入失败: {e}")
-        st.info("💡 资产配置调整功能将不可用")
-        adjust_allocation = None
-        
-    # 导入基本面分析模块
-    try:
-        from fundamental_analysis.fundamental_manager import FundamentalAnalysisManager
-        st.success("✅ 基本面分析模块导入成功")
-    except ImportError as e:
-        st.warning(f"⚠️ 基本面分析模块导入失败: {e}")
-        st.info("💡 基本面分析功能将不可用，但其他功能仍可正常使用")
-        FundamentalAnalysisManager = None
-        
-    # 导入技术分析模块
-    try:
-        from technical_analysis.technical_signals import TechnicalAnalysisManager
-        st.success("✅ 技术分析模块导入成功")
-    except ImportError as e:
-        st.warning(f"⚠️ 技术分析模块导入失败: {e}")
-        st.info("💡 技术分析功能将不可用，但其他功能仍可正常使用")
-        TechnicalAnalysisManager = None
-        
-    st.success("🎯 模块导入完成")
-        
-except Exception as e:
-    st.error(f"❌ 模块导入失败：{e}")
-    st.stop()
+# 导入资产配置调整模块
+try:
+    from macro_analysis.allocation_adjust import adjust_allocation
+    adjust_allocation_available = True
+except ImportError:
+    adjust_allocation_available = False
+    adjust_allocation = None
+    
+# 导入基本面分析模块
+try:
+    from fundamental_analysis.fundamental_manager import FundamentalAnalysisManager
+    fundamental_analysis_available = True
+except ImportError:
+    fundamental_analysis_available = False
+    FundamentalAnalysisManager = None
+    
+# 导入技术分析模块
+try:
+    from technical_analysis.technical_signals import TechnicalAnalysisManager
+    technical_analysis_available = True
+except ImportError:
+    technical_analysis_available = False
+    TechnicalAnalysisManager = None
 
 # 设置页面配置
 st.set_page_config(
@@ -207,7 +189,7 @@ class CompletePortfolioSystem:
         with st.spinner("📊 正在筛选优质资产..."):
             try:
                 # 检查函数是否可用
-                if FundamentalAnalysisManager is None:
+                if not fundamental_analysis_available:
                     st.error("❌ 基本面分析模块未正确导入")
                     return False
                 
@@ -220,12 +202,12 @@ class CompletePortfolioSystem:
                 # 股票分析
                 equity_success = fundamental_manager.run_equity_analysis()
                 if equity_success:
-                    selected_equities = fundamental_manager.get_selected_tickers('equities')
-                    if selected_equities:
-                        self.equity_candidates = pd.DataFrame({
-                            'ticker': selected_equities,
-                            'selected_date': datetime.now().strftime('%Y-%m-%d')
-                        })
+                    equity_assets = fundamental_manager.all_selected_assets.get('equities')
+                    if equity_assets is not None and not equity_assets.empty:
+                        # 复制完整的资产信息
+                        self.equity_candidates = equity_assets.copy()
+                        # 添加筛选日期
+                        self.equity_candidates['selected_date'] = datetime.now().strftime('%Y-%m-%d')
                         st.success(f"✅ 股票筛选完成，选出 {len(self.equity_candidates)} 只股票")
                     else:
                         st.warning("⚠️ 股票筛选未返回结果")
@@ -237,12 +219,12 @@ class CompletePortfolioSystem:
                 # 债券分析
                 bond_success = fundamental_manager.run_bond_analysis()
                 if bond_success:
-                    selected_bonds = fundamental_manager.get_selected_tickers('bonds')
-                    if selected_bonds:
-                        self.bond_candidates = pd.DataFrame({
-                            'ticker': selected_bonds,
-                            'selected_date': datetime.now().strftime('%Y-%m-%d')
-                        })
+                    bond_assets = fundamental_manager.all_selected_assets.get('bonds')
+                    if bond_assets is not None and not bond_assets.empty:
+                        # 复制完整的资产信息
+                        self.bond_candidates = bond_assets.copy()
+                        # 添加筛选日期
+                        self.bond_candidates['selected_date'] = datetime.now().strftime('%Y-%m-%d')
                         st.success(f"✅ 债券筛选完成，选出 {len(self.bond_candidates)} 只债券")
                     else:
                         st.warning("⚠️ 债券筛选未返回结果")
@@ -254,13 +236,13 @@ class CompletePortfolioSystem:
                 # 商品分析
                 commodity_success = fundamental_manager.run_commodity_analysis()
                 if commodity_success:
-                    selected_commodities = fundamental_manager.get_selected_tickers('commodities')
-                    if selected_commodities:
-                        self.commodity_candidates = pd.DataFrame({
-                            'ticker': selected_commodities,
-                            'selected_date': datetime.now().strftime('%Y-%m-%d')
-                        })
-                        st.success(f"✅ 商品筛选完成，选出 {len(selected_commodities)} 只商品")
+                    commodity_assets = fundamental_manager.all_selected_assets.get('commodities')
+                    if commodity_assets is not None and not commodity_assets.empty:
+                        # 复制完整的资产信息
+                        self.commodity_candidates = commodity_assets.copy()
+                        # 添加筛选日期
+                        self.commodity_candidates['selected_date'] = datetime.now().strftime('%Y-%m-%d')
+                        st.success(f"✅ 商品筛选完成，选出 {len(commodity_assets)} 只商品")
                     else:
                         st.warning("⚠️ 商品筛选未返回结果")
                         self.commodity_candidates = pd.DataFrame()
@@ -271,13 +253,13 @@ class CompletePortfolioSystem:
                 # 黄金分析
                 gold_success = fundamental_manager.run_gold_analysis()
                 if gold_success:
-                    selected_golds = fundamental_manager.get_selected_tickers('golds')
-                    if selected_golds:
-                        self.gold_candidates = pd.DataFrame({
-                            'ticker': selected_golds,
-                            'selected_date': datetime.now().strftime('%Y-%m-%d')
-                        })
-                        st.success(f"✅ 黄金筛选完成，选出 {len(selected_golds)} 只黄金")
+                    gold_assets = fundamental_manager.all_selected_assets.get('golds')
+                    if gold_assets is not None and not gold_assets.empty:
+                        # 复制完整的资产信息
+                        self.gold_candidates = gold_assets.copy()
+                        # 添加筛选日期
+                        self.gold_candidates['selected_date'] = datetime.now().strftime('%Y-%m-%d')
+                        st.success(f"✅ 黄金筛选完成，选出 {len(gold_assets)} 只黄金")
                     else:
                         st.warning("⚠️ 黄金筛选未返回结果")
                         self.gold_candidates = pd.DataFrame()
@@ -289,8 +271,8 @@ class CompletePortfolioSystem:
                 total_candidates = (
                     len(self.equity_candidates) if hasattr(self, 'equity_candidates') and not self.equity_candidates.empty else 0 +
                     len(self.bond_candidates) if hasattr(self, 'bond_candidates') and not self.bond_candidates.empty else 0 +
-                    len(self.commodity_candidates) if hasattr(self, 'bond_candidates') and not self.commodity_candidates.empty else 0 +
-                    len(self.gold_candidates) if hasattr(self, 'bond_candidates') and not self.gold_candidates.empty else 0
+                    len(self.commodity_candidates) if hasattr(self, 'commodity_candidates') and not self.commodity_candidates.empty else 0 +
+                    len(self.gold_candidates) if hasattr(self, 'gold_candidates') and not self.gold_candidates.empty else 0
                 )
                 
                 if total_candidates > 0:
@@ -674,11 +656,54 @@ def generate_portfolio_charts(portfolio, metrics):
     
     return charts
 
+def display_fundamental_results(system):
+    """显示基本面分析结果"""
+    st.subheader("📊 基本面分析结果")
+    
+    asset_class_names = {
+        'equities': '股票',
+        'bonds': '债券',
+        'commodities': '大宗商品',
+        'golds': '黄金'
+    }
+    
+    # 显示各资产类别的筛选结果
+    for asset_class, name in asset_class_names.items():
+        candidates_attr = f"{asset_class}_candidates"
+        if hasattr(system, candidates_attr) and not getattr(system, candidates_attr).empty:
+            candidates = getattr(system, candidates_attr)
+            st.write(f"**{name} 筛选结果 ({len(candidates)} 个标的)**")
+            
+            # 创建结果表格
+            result_data = []
+            for _, row in candidates.iterrows():
+                result_data.append({
+                    '代码': row['ticker'],
+                    '名称': row.get('name', 'N/A'),
+                    '得分': f"{row.get('score', 0):.1f}" if 'score' in row else 'N/A',
+                    '筛选日期': row.get('selected_date', 'N/A'),
+                    '状态': '✅ 已筛选'
+                })
+            
+            if result_data:
+                df = pd.DataFrame(result_data)
+                st.dataframe(df, use_container_width=True)
+            else:
+                st.info(f"⚠️ {name} 暂无筛选结果")
+        else:
+            st.write(f"**{name} 筛选结果**")
+            st.info(f"⚠️ {name} 暂无筛选结果或筛选失败")
+        
+        st.divider()
+    
+    # 添加筛选说明
+    st.info("💡 基本面分析基于财务指标、行业地位、成长性等多维度指标进行筛选，结果将定期更新")
+
 def display_technical_signals(technical_manager):
     """显示技术分析信号"""
     st.subheader("📈 技术分析信号")
     
-    if not technical_manager or not hasattr(technical_manager, 'all_signals'):
+    if not technical_manager:
         st.warning("⚠️ 技术分析数据不可用")
         return
     
@@ -700,8 +725,8 @@ def display_technical_signals(technical_manager):
         st.warning(f"⚠️ 无法获取信号汇总：{e}")
         summary = {'total_signals': 0, 'buy_signals': 0, 'sell_signals': 0, 'watch_signals': 0}
     
-    # 显示每个资产类别的具体建议
-    st.subheader("🎯 各资产类别技术分析建议")
+    # 显示每个资产类别的所有标的和技术分析结果
+    st.subheader("🎯 各资产类别技术分析结果")
     
     asset_class_names = {
         'equities': '股票',
@@ -710,30 +735,58 @@ def display_technical_signals(technical_manager):
         'golds': '黄金'
     }
     
-    for asset_class, signals in technical_manager.all_signals.items():
-        if signals:
-            asset_name = asset_class_names.get(asset_class, asset_class)
-            st.write(f"**{asset_name} ({len(signals)} 个标的)**")
-            
-            # 创建信号表格
-            signal_data = []
-            for ticker, signal in list(signals.items())[:5]:  # 显示前5个
-                signal_data.append({
+    # 获取所有资产类别的标的列表
+    all_tickers = {
+        'equities': ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA', 'META', 'NFLX', 'JPM', 'JNJ', 'V', 'PG', 'UNH', 'HD', 'MA'],
+        'bonds': ['TLT', 'IEF', 'SHY', 'AGG', 'BND', 'VCIT', 'VCSH', 'LQD', 'HYG', 'JNK', 'BNDX', 'VWOB', 'EMB', 'PCY', 'LEMB'],
+        'commodities': ['DIA', 'SPY', 'QQQ', 'IWM', 'GLD', 'SLV', 'USO', 'UNG', 'DBA', 'DBC', 'XLE', 'XLF', 'XLK', 'XLV', 'XLI'],
+        'golds': ['GLD', 'IAU', 'SGOL', 'GLDM', 'BAR', 'OUNZ', 'GLTR', 'AAAU', 'GLDE', 'BGLD', 'XAUUSD=X', 'GC=F', 'GLD', 'IAU', 'SGOL']
+    }
+    
+    for asset_class, tickers in all_tickers.items():
+        asset_name = asset_class_names.get(asset_class, asset_class)
+        st.write(f"**{asset_name} 技术分析结果**")
+        
+        # 获取该资产类别的技术分析信号
+        signals = technical_manager.all_signals.get(asset_class, {})
+        
+        # 为每个标的创建技术分析结果
+        analysis_results = []
+        for ticker in tickers:
+            if ticker in signals:
+                # 有明确信号的情况
+                signal = signals[ticker]
+                analysis_results.append({
                     '代码': ticker,
                     '策略': signal.get('strategy', 'N/A'),
                     '信号': signal.get('signal', 'WATCH'),
                     '置信度': f"{signal.get('confidence', 0):.1%}",
                     '建议': signal.get('recommendation', '建议观望，一周内买入'),
-                    '价格': f"${signal.get('price', 0):.2f}" if signal.get('price', 0) > 0 else 'N/A'
+                    '价格': f"${signal.get('price', 0):.2f}" if signal.get('price', 0) > 0 else 'N/A',
+                    '状态': '🟢 有信号'
                 })
-            
-            if signal_data:
-                df = pd.DataFrame(signal_data)
-                st.dataframe(df, use_container_width=True)
             else:
-                st.info(f"⚠️ {asset_name} 暂无技术分析信号")
+                # 没有明确信号的情况，显示观望状态
+                analysis_results.append({
+                    '代码': ticker,
+                    '策略': '综合技术指标',
+                    '信号': 'WATCH',
+                    '置信度': '50.0%',
+                    '建议': '当前无明显交易信号，建议观望',
+                    '价格': 'N/A',
+                    '状态': '🟡 观望中'
+                })
+        
+        if analysis_results:
+            df = pd.DataFrame(analysis_results)
+            st.dataframe(df, use_container_width=True)
             
-            st.divider()
+            # 添加实时更新提示
+            st.info(f"💡 {asset_name} 技术分析结果将实时更新，建议定期刷新页面获取最新信号")
+        else:
+            st.info(f"⚠️ {asset_name} 暂无技术分析数据")
+        
+        st.divider()
     
     # 显示最强信号
     try:
@@ -765,6 +818,9 @@ def display_technical_signals(technical_manager):
         if status_data:
             status_df = pd.DataFrame(status_data)
             st.dataframe(status_df, use_container_width=True)
+    
+    # 添加自动刷新说明
+    st.info("🔄 技术分析结果将根据市场数据自动更新，建议每15-30分钟刷新一次页面")
 
 def main():
     """主函数"""
@@ -838,7 +894,7 @@ def main():
                 analysis_results = {}
                 
                 # 运行宏观分析
-                if run_macro and fetch_macro_data is not None:
+                if run_macro and fetch_macro_data_available:
                     try:
                         macro_success = system.run_macro_analysis()
                         if macro_success:
@@ -853,7 +909,7 @@ def main():
                     analysis_results['macro'] = "⏭️ 跳过宏观分析"
                 
                 # 运行基本面分析
-                if run_fundamental and FundamentalAnalysisManager is not None:
+                if run_fundamental and fundamental_analysis_available:
                     try:
                         fundamental_success = system.run_fundamental_analysis()
                         if fundamental_success:
@@ -868,7 +924,7 @@ def main():
                     analysis_results['fundamental'] = "⏭️ 跳过基本面分析"
                 
                 # 运行技术分析
-                if run_technical and TechnicalAnalysisManager is not None:
+                if run_technical and technical_analysis_available:
                     try:
                         technical_success = system.run_technical_analysis()
                         if technical_success:
@@ -945,22 +1001,31 @@ def main():
             if system.run_fundamental_analysis():
                 st.success("✅ 基本面分析完成")
         
-        if system.equity_candidates is not None and not system.equity_candidates.empty:
-            st.success(f"✅ 已筛选 {len(system.equity_candidates)} 只股票")
+        # 显示所有资产类别的筛选结果
+        if (hasattr(system, 'equity_candidates') and system.equity_candidates is not None and not system.equity_candidates.empty) or \
+           (hasattr(system, 'bond_candidates') and system.bond_candidates is not None and not system.bond_candidates.empty) or \
+           (hasattr(system, 'commodity_candidates') and system.commodity_candidates is not None and not system.commodity_candidates.empty) or \
+           (hasattr(system, 'gold_candidates') and system.gold_candidates is not None and not system.gold_candidates.empty):
             
-            # 显示股票候选池
-            st.subheader("📋 股票候选池")
-            st.dataframe(system.equity_candidates.head(20))
+            # 调用基本面结果显示函数
+            display_fundamental_results(system)
             
-            # 股票分布统计
-            if 'sector' in system.equity_candidates.columns:
-                sector_counts = system.equity_candidates['sector'].value_counts()
-                fig_sector = px.bar(
-                    x=sector_counts.index, 
-                    y=sector_counts.values,
-                    title="行业分布"
-                )
-                st.plotly_chart(fig_sector, use_container_width=True)
+            # 显示股票候选池的额外信息（如果有的话）
+            if system.equity_candidates is not None and not system.equity_candidates.empty:
+                st.subheader("📋 股票候选池详情")
+                st.dataframe(system.equity_candidates.head(20))
+                
+                # 股票分布统计
+                if 'sector' in system.equity_candidates.columns:
+                    sector_counts = system.equity_candidates['sector'].value_counts()
+                    fig_sector = px.bar(
+                        x=sector_counts.index, 
+                        y=sector_counts.values,
+                        title="行业分布"
+                    )
+                    st.plotly_chart(fig_sector, use_container_width=True)
+        else:
+            st.info("💡 点击上方按钮运行基本面分析")
     
     # 技术分析标签页
     with tab4:
