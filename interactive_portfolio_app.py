@@ -213,25 +213,93 @@ class CompletePortfolioSystem:
                 
                 # 创建基本面分析管理器实例
                 fundamental_manager = FundamentalAnalysisManager()
-                success = fundamental_manager.run_equity_analysis()
                 
-                if success:
-                    # 获取选中的股票
+                # 运行所有资产类别的分析
+                st.info("🔄 正在分析各个资产类别...")
+                
+                # 股票分析
+                equity_success = fundamental_manager.run_equity_analysis()
+                if equity_success:
                     selected_equities = fundamental_manager.get_selected_tickers('equities')
                     if selected_equities:
-                        # 创建DataFrame
                         self.equity_candidates = pd.DataFrame({
                             'ticker': selected_equities,
                             'selected_date': datetime.now().strftime('%Y-%m-%d')
                         })
-                        st.success(f"✅ 基本面分析完成，筛选出 {len(self.equity_candidates)} 只股票")
-                        return True
+                        st.success(f"✅ 股票筛选完成，选出 {len(self.equity_candidates)} 只股票")
                     else:
-                        st.warning("⚠️ 基本面分析未返回股票结果")
-                        return False
+                        st.warning("⚠️ 股票筛选未返回结果")
+                        self.equity_candidates = pd.DataFrame()
                 else:
-                    st.error("❌ 基本面分析执行失败")
+                    st.warning("⚠️ 股票分析失败")
+                    self.equity_candidates = pd.DataFrame()
+                
+                # 债券分析
+                bond_success = fundamental_manager.run_bond_analysis()
+                if bond_success:
+                    selected_bonds = fundamental_manager.get_selected_tickers('bonds')
+                    if selected_bonds:
+                        self.bond_candidates = pd.DataFrame({
+                            'ticker': selected_bonds,
+                            'selected_date': datetime.now().strftime('%Y-%m-%d')
+                        })
+                        st.success(f"✅ 债券筛选完成，选出 {len(self.bond_candidates)} 只债券")
+                    else:
+                        st.warning("⚠️ 债券筛选未返回结果")
+                        self.bond_candidates = pd.DataFrame()
+                else:
+                    st.warning("⚠️ 债券分析失败")
+                    self.bond_candidates = pd.DataFrame()
+                
+                # 商品分析
+                commodity_success = fundamental_manager.run_commodity_analysis()
+                if commodity_success:
+                    selected_commodities = fundamental_manager.get_selected_tickers('commodities')
+                    if selected_commodities:
+                        self.commodity_candidates = pd.DataFrame({
+                            'ticker': selected_commodities,
+                            'selected_date': datetime.now().strftime('%Y-%m-%d')
+                        })
+                        st.success(f"✅ 商品筛选完成，选出 {len(selected_commodities)} 只商品")
+                    else:
+                        st.warning("⚠️ 商品筛选未返回结果")
+                        self.commodity_candidates = pd.DataFrame()
+                else:
+                    st.warning("⚠️ 商品分析失败")
+                    self.commodity_candidates = pd.DataFrame()
+                
+                # 黄金分析
+                gold_success = fundamental_manager.run_gold_analysis()
+                if gold_success:
+                    selected_golds = fundamental_manager.get_selected_tickers('golds')
+                    if selected_golds:
+                        self.gold_candidates = pd.DataFrame({
+                            'ticker': selected_golds,
+                            'selected_date': datetime.now().strftime('%Y-%m-%d')
+                        })
+                        st.success(f"✅ 黄金筛选完成，选出 {len(selected_golds)} 只黄金")
+                    else:
+                        st.warning("⚠️ 黄金筛选未返回结果")
+                        self.gold_candidates = pd.DataFrame()
+                else:
+                    st.warning("⚠️ 黄金分析失败")
+                    self.gold_candidates = pd.DataFrame()
+                
+                # 检查是否有任何资产类别成功
+                total_candidates = (
+                    len(self.equity_candidates) if hasattr(self, 'equity_candidates') and not self.equity_candidates.empty else 0 +
+                    len(self.bond_candidates) if hasattr(self, 'bond_candidates') and not self.bond_candidates.empty else 0 +
+                    len(self.commodity_candidates) if hasattr(self, 'bond_candidates') and not self.commodity_candidates.empty else 0 +
+                    len(self.gold_candidates) if hasattr(self, 'bond_candidates') and not self.gold_candidates.empty else 0
+                )
+                
+                if total_candidates > 0:
+                    st.success(f"🎉 基本面分析完成！总共筛选出 {total_candidates} 个标的")
+                    return True
+                else:
+                    st.warning("⚠️ 基本面分析未返回任何结果")
                     return False
+                    
             except Exception as e:
                 st.error(f"❌ 基本面分析失败：{e}")
                 return False
@@ -259,8 +327,14 @@ class CompletePortfolioSystem:
     
     def generate_portfolio_recommendation(self, investment_amount, investment_horizon, risk_profile):
         """生成投资组合建议"""
-        if not self.asset_allocation or not self.equity_candidates:
-            st.error("❌ 缺少必要数据，无法生成投资组合建议")
+        # 检查资产配置
+        if not self.asset_allocation:
+            st.error("❌ 缺少宏观分析数据，请先运行宏观分析")
+            return None
+        
+        # 检查基本面分析结果
+        if not hasattr(self, 'equity_candidates') or self.equity_candidates is None or self.equity_candidates.empty:
+            st.error("❌ 缺少基本面分析数据，请先运行基本面分析")
             return None
         
         # 根据投资期限调整配置
@@ -337,12 +411,60 @@ class CompletePortfolioSystem:
         commodity_amount = investment_amount * allocation['commodities'] / 100
         portfolio['assets']['commodities'] = self._select_commodity_assets(commodity_amount)
         
+        # 整合技术分析建议
+        if hasattr(self, 'technical_manager') and self.technical_manager:
+            portfolio['technical_signals'] = self._integrate_technical_signals()
+        
         return portfolio
+    
+    def _integrate_technical_signals(self):
+        """整合技术分析信号到投资组合"""
+        technical_recommendations = {}
+        
+        if hasattr(self.technical_manager, 'all_signals'):
+            for asset_class, signals in self.technical_manager.all_signals.items():
+                if signals:
+                    recommendations = []
+                    for ticker, signal in list(signals.items())[:5]:  # 取前5个信号
+                        recommendations.append({
+                            'ticker': ticker,
+                            'signal': signal.get('signal', 'WATCH'),
+                            'strategy': signal.get('strategy', 'technical'),
+                            'confidence': signal.get('confidence', 0.3),
+                            'recommendation': signal.get('recommendation', '建议观望，一周内买入'),
+                            'price': signal.get('price', 0),
+                            'stop_loss': signal.get('stop_loss', 0),
+                            'target': signal.get('target', 0)
+                        })
+                    technical_recommendations[asset_class] = recommendations
+        
+        return technical_recommendations
     
     def _select_equity_stocks(self, total_amount):
         """选择股票标的"""
         if self.equity_candidates is None or self.equity_candidates.empty:
-            return []
+            # 如果没有基本面分析结果，使用技术分析结果
+            if hasattr(self, 'technical_manager') and self.technical_manager and 'equities' in self.technical_manager.all_signals:
+                signals = self.technical_manager.all_signals['equities']
+                selected = list(signals.keys())[:8]  # 取前8个
+                per_stock_amount = total_amount / len(selected)
+                
+                stocks = []
+                for ticker in selected:
+                    signal = signals[ticker]
+                    stocks.append({
+                        'ticker': ticker,
+                        'name': f'{ticker} Stock',
+                        'amount': per_stock_amount,
+                        'weight': per_stock_amount / total_amount * 100,
+                        'sector': 'N/A',
+                        'market_cap': 'N/A',
+                        'technical_signal': signal.get('signal', 'WATCH'),
+                        'recommendation': signal.get('recommendation', '建议观望，一周内买入')
+                    })
+                return stocks
+            else:
+                return []
         
         # 选择前8只股票
         selected = self.equity_candidates.head(8)
@@ -356,7 +478,9 @@ class CompletePortfolioSystem:
                 'amount': per_stock_amount,
                 'weight': per_stock_amount / total_amount * 100,
                 'sector': stock.get('sector', 'N/A'),
-                'market_cap': stock.get('market_cap', 'N/A')
+                'market_cap': stock.get('market_cap', 'N/A'),
+                'technical_signal': 'N/A',
+                'recommendation': '基于基本面分析选择'
             })
         
         return stocks
@@ -365,50 +489,79 @@ class CompletePortfolioSystem:
         """选择债券ETF"""
         bonds = []
         
+        # 检查是否有技术分析建议
+        bond_signals = []
+        if hasattr(self, 'technical_manager') and self.technical_manager and 'bonds' in self.technical_manager.all_signals:
+            bond_signals = list(self.technical_manager.all_signals['bonds'].keys())
+        
         # 中期债券
         if allocation['bonds_mid'] > 0:
             mid_amount = total_amount * allocation['bonds_mid'] / (allocation['bonds_mid'] + allocation['bonds_long'])
+            ticker = bond_signals[0] if bond_signals else 'BND'
             bonds.append({
-                'ticker': 'BND',
+                'ticker': ticker,
                 'name': 'Vanguard Total Bond Market ETF',
                 'amount': mid_amount,
                 'weight': mid_amount / total_amount * 100,
                 'duration': '中期',
-                'type': '国债+信用债'
+                'type': '国债+信用债',
+                'technical_signal': 'WATCH',
+                'recommendation': '建议观望，一周内买入'
             })
         
         # 长期债券
         if allocation['bonds_long'] > 0:
             long_amount = total_amount * allocation['bonds_long'] / (allocation['bonds_mid'] + allocation['bonds_long'])
+            ticker = bond_signals[1] if len(bond_signals) > 1 else 'TLT'
             bonds.append({
-                'ticker': 'TLT',
+                'ticker': ticker,
                 'name': 'iShares 20+ Year Treasury Bond ETF',
                 'amount': long_amount,
                 'weight': long_amount / total_amount * 100,
                 'duration': '长期',
-                'type': '长期国债'
+                'type': '长期国债',
+                'technical_signal': 'WATCH',
+                'recommendation': '建议观望，一周内买入'
             })
         
         return bonds
     
     def _select_gold_assets(self, total_amount):
         """选择黄金资产"""
+        # 检查是否有技术分析建议
+        gold_ticker = 'GLD'
+        if hasattr(self, 'technical_manager') and self.technical_manager and 'golds' in self.technical_manager.all_signals:
+            gold_signals = list(self.technical_manager.all_signals['golds'].keys())
+            if gold_signals:
+                gold_ticker = gold_signals[0]
+        
         return [{
-            'ticker': 'GLD',
+            'ticker': gold_ticker,
             'name': 'SPDR Gold Shares',
             'amount': total_amount,
             'weight': 100,
-            'type': '黄金ETF'
+            'type': '黄金ETF',
+            'technical_signal': 'WATCH',
+            'recommendation': '建议观望，一周内买入'
         }]
     
     def _select_commodity_assets(self, total_amount):
         """选择商品资产"""
+        # 检查是否有技术分析建议
+        commodity_ticker = 'DJP'
+        if hasattr(self, 'technical_manager') and self.technical_manager and 'commodities' in self.technical_manager.all_signals:
+            commodity_signals = list(self.technical_manager.all_signals['commodities'].keys())
+            if commodity_signals:
+                commodity_ticker = commodity_signals[0]
+        
         return [{
-            'ticker': 'DJP',
+            'ticker': commodity_ticker,
             'name': 'iPath Bloomberg Commodity Index ETN',
             'amount': total_amount,
             'weight': 100,
-            'type': '商品指数'
+            'type': '商品指数',
+            'technical_signal': 'WATCH',
+            'recommendation': '建议观望，一周内买入'
         }]
 
 def calculate_portfolio_metrics(portfolio, investment_amount):
@@ -525,38 +678,93 @@ def display_technical_signals(technical_manager):
     """显示技术分析信号"""
     st.subheader("📈 技术分析信号")
     
-    # 获取信号汇总
-    summary = technical_manager.get_trading_summary()
+    if not technical_manager or not hasattr(technical_manager, 'all_signals'):
+        st.warning("⚠️ 技术分析数据不可用")
+        return
     
-    # 显示信号统计
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("总信号数", summary['total_signals'])
-    with col2:
-        st.metric("买入信号", summary['buy_signals'], delta=f"+{summary['buy_signals']}")
-    with col3:
-        st.metric("卖出信号", summary['sell_signals'], delta=f"-{summary['sell_signals']}")
-    with col4:
-        st.metric("持有信号", summary['hold_signals'])
+    # 获取信号汇总
+    try:
+        summary = technical_manager.get_trading_summary()
+        
+        # 显示信号统计
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("总信号数", summary.get('total_signals', 0))
+        with col2:
+            st.metric("买入信号", summary.get('buy_signals', 0), delta=f"+{summary.get('buy_signals', 0)}")
+        with col3:
+            st.metric("卖出信号", summary.get('sell_signals', 0), delta=f"-{summary.get('sell_signals', 0)}")
+        with col4:
+            st.metric("观望信号", summary.get('watch_signals', 0))
+    except Exception as e:
+        st.warning(f"⚠️ 无法获取信号汇总：{e}")
+        summary = {'total_signals': 0, 'buy_signals': 0, 'sell_signals': 0, 'watch_signals': 0}
+    
+    # 显示每个资产类别的具体建议
+    st.subheader("🎯 各资产类别技术分析建议")
+    
+    asset_class_names = {
+        'equities': '股票',
+        'bonds': '债券',
+        'commodities': '大宗商品',
+        'golds': '黄金'
+    }
+    
+    for asset_class, signals in technical_manager.all_signals.items():
+        if signals:
+            asset_name = asset_class_names.get(asset_class, asset_class)
+            st.write(f"**{asset_name} ({len(signals)} 个标的)**")
+            
+            # 创建信号表格
+            signal_data = []
+            for ticker, signal in list(signals.items())[:5]:  # 显示前5个
+                signal_data.append({
+                    '代码': ticker,
+                    '策略': signal.get('strategy', 'N/A'),
+                    '信号': signal.get('signal', 'WATCH'),
+                    '置信度': f"{signal.get('confidence', 0):.1%}",
+                    '建议': signal.get('recommendation', '建议观望，一周内买入'),
+                    '价格': f"${signal.get('price', 0):.2f}" if signal.get('price', 0) > 0 else 'N/A'
+                })
+            
+            if signal_data:
+                df = pd.DataFrame(signal_data)
+                st.dataframe(df, use_container_width=True)
+            else:
+                st.info(f"⚠️ {asset_name} 暂无技术分析信号")
+            
+            st.divider()
     
     # 显示最强信号
-    if summary['strongest_signals']:
-        st.subheader("🔥 最强交易信号")
-        for signal in summary['strongest_signals']:
-            signal_class = signal['signal'].lower()
-            st.markdown(f"""
-            <div class="signal-card {signal_class}">
-                <strong>{signal['ticker']}</strong> ({signal['asset_class']}) - {signal['signal']}<br>
-                信号强度: {signal['strength']:.2f}
-            </div>
-            """, unsafe_allow_html=True)
+    try:
+        if summary.get('strongest_signals'):
+            st.subheader("🔥 最强交易信号")
+            strongest_df = pd.DataFrame(summary['strongest_signals'])
+            st.dataframe(strongest_df, use_container_width=True)
+    except Exception as e:
+        st.info("暂无最强信号数据")
     
-    # 按资产类别显示信号
-    for asset_class in ['equities', 'bonds', 'commodities', 'golds']:
-        signals = technical_manager.get_asset_class_signals(asset_class)
-        if not signals.empty:
-            st.subheader(f"📊 {asset_class.title()} 技术信号")
-            st.dataframe(signals[['ticker', 'signal', 'strength', 'timestamp']].head(10))
+    # 显示技术分析状态
+    if hasattr(technical_manager, 'analysis_status'):
+        st.subheader("📊 技术分析状态")
+        status_data = []
+        for asset_class, status in technical_manager.analysis_status.items():
+            status_text = {
+                'success': '✅ 成功',
+                'error': '❌ 失败',
+                'watch_signals': '👀 观望信号',
+                'no_signals': '⚠️ 无信号'
+            }.get(status, status)
+            
+            status_data.append({
+                '资产类别': asset_class_names.get(asset_class, asset_class),
+                '状态': status_text,
+                '信号数量': len(technical_manager.all_signals.get(asset_class, {}))
+            })
+        
+        if status_data:
+            status_df = pd.DataFrame(status_data)
+            st.dataframe(status_df, use_container_width=True)
 
 def main():
     """主函数"""
@@ -833,9 +1041,114 @@ def main():
             st.subheader("📋 详细资产配置")
             for asset_class, assets in portfolio['assets'].items():
                 if assets:
-                    st.write(f"**{asset_class.title()}：**")
+                    asset_class_name = {
+                        'equities': '股票',
+                        'bonds': '债券',
+                        'gold': '黄金',
+                        'commodities': '大宗商品'
+                    }.get(asset_class, asset_class)
+                    
+                    st.write(f"**{asset_class_name}：**")
                     asset_df = pd.DataFrame(assets)
+                    
+                    # 格式化金额显示
+                    if 'amount' in asset_df.columns:
+                        asset_df['金额'] = asset_df['amount'].apply(lambda x: f"${x:,.2f}")
+                        asset_df['权重'] = asset_df['weight'].apply(lambda x: f"{x:.1f}%")
+                    
+                    # 显示资产表格
                     st.dataframe(asset_df, use_container_width=True)
+                    
+                    # 显示技术分析建议
+                    if 'technical_signals' in portfolio and asset_class in portfolio['technical_signals']:
+                        st.write(f"**{asset_class_name}技术分析建议：**")
+                        tech_signals = portfolio['technical_signals'][asset_class]
+                        if tech_signals:
+                            tech_df = pd.DataFrame(tech_signals)
+                            # 格式化显示
+                            if 'price' in tech_df.columns:
+                                tech_df['价格'] = tech_df['price'].apply(lambda x: f"${x:.2f}" if x > 0 else 'N/A')
+                            if 'confidence' in tech_df.columns:
+                                tech_df['置信度'] = tech_df['confidence'].apply(lambda x: f"{x:.1%}")
+                            
+                            st.dataframe(tech_df[['ticker', 'signal', 'strategy', 'confidence', 'recommendation']], 
+                                        use_container_width=True)
+                        else:
+                            st.info(f"⚠️ {asset_class_name} 暂无技术分析建议")
+                    
+                    st.divider()
+            
+            # 技术分析建议汇总
+            if 'technical_signals' in portfolio:
+                st.subheader("📈 技术分析建议汇总")
+                
+                all_recommendations = []
+                for asset_class, signals in portfolio['technical_signals'].items():
+                    for signal in signals:
+                        asset_class_name = {
+                            'equities': '股票',
+                            'bonds': '债券',
+                            'gold': '黄金',
+                            'commodities': '大宗商品',
+                            'golds': '黄金'
+                        }.get(asset_class, asset_class)
+                        
+                        all_recommendations.append({
+                            '资产类别': asset_class_name,
+                            '代码': signal['ticker'],
+                            '信号': signal['signal'],
+                            '策略': signal['strategy'],
+                            '置信度': f"{signal['confidence']:.1%}",
+                            '建议': signal['recommendation']
+                        })
+                
+                if all_recommendations:
+                    rec_df = pd.DataFrame(all_recommendations)
+                    st.dataframe(rec_df, use_container_width=True)
+                    
+                    # 统计信号类型
+                    signal_counts = rec_df['信号'].value_counts()
+                    st.write("**信号统计：**")
+                    for signal, count in signal_counts.items():
+                        signal_icon = {
+                            'BUY': '🟢',
+                            'SELL': '🔴',
+                            'WATCH': '🟡'
+                        }.get(signal, '⚪')
+                        st.write(f"{signal_icon} {signal}: {count} 个")
+                else:
+                    st.info("暂无技术分析建议")
+            
+            # 投资建议总结
+            st.subheader("💡 投资建议总结")
+            
+            # 根据技术分析生成建议
+            if 'technical_signals' in portfolio:
+                buy_signals = 0
+                watch_signals = 0
+                
+                for asset_class, signals in portfolio['technical_signals'].items():
+                    for signal in signals:
+                        if signal['signal'] == 'BUY':
+                            buy_signals += 1
+                        elif signal['signal'] == 'WATCH':
+                            watch_signals += 1
+                
+                if buy_signals > 0:
+                    st.success(f"🎯 建议买入 {buy_signals} 个标的，把握当前投资机会")
+                
+                if watch_signals > 0:
+                    st.info(f"👀 建议观望 {watch_signals} 个标的，等待更好的入场时机")
+                
+                st.info("""
+                **投资策略建议：**
+                - 📈 对于买入信号的标的，建议一周内分批建仓
+                - 👀 对于观望信号的标的，建议持续关注，等待技术指标改善
+                - ⚖️ 建议采用定投策略，分散投资风险
+                - 📊 定期回顾投资组合，根据市场变化调整配置
+                """)
+            else:
+                st.info("💡 建议采用均衡配置策略，定期再平衡投资组合")
 
 if __name__ == "__main__":
     main()

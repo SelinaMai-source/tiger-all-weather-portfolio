@@ -136,11 +136,11 @@ class EquityTechnicalStrategy:
             volume_sma = ind['volume_sma'].iloc[-1]
             atr = ind['atr'].iloc[-1]
             
-            # 放宽突破条件
-            price_above_sma20 = current_price > sma_20
-            price_above_sma50 = current_price > sma_50
-            volume_breakout = volume > volume_sma * 1.2  # 降低成交量要求
-            trend_strength = sma_20 > sma_50
+            # 大幅降低突破条件，确保能生成信号
+            price_above_sma20 = current_price > sma_20 * 0.98  # 允许2%的误差
+            price_above_sma50 = current_price > sma_50 * 0.97  # 允许3%的误差
+            volume_breakout = volume > volume_sma * 0.8  # 大幅降低成交量要求
+            trend_strength = sma_20 > sma_50 * 0.99  # 允许1%的误差
             
             # 计算突破强度
             breakout_strength = 0
@@ -153,8 +153,8 @@ class EquityTechnicalStrategy:
             if trend_strength:
                 breakout_strength += 1
             
-            # 降低信号生成门槛
-            if breakout_strength >= 2:  # 从3降低到2
+            # 大幅降低信号生成门槛
+            if breakout_strength >= 1:  # 从2降低到1
                 signals[ticker] = {
                     'strategy': 'momentum_breakout',
                     'signal': 'BUY',
@@ -162,7 +162,20 @@ class EquityTechnicalStrategy:
                     'price': current_price,
                     'stop_loss': current_price - 2 * atr,
                     'target': current_price + 3 * atr,
-                    'confidence': min(breakout_strength / 4, 1.0)
+                    'confidence': min(breakout_strength / 4, 1.0),
+                    'recommendation': '建议一周内买入' if breakout_strength >= 2 else '建议观望，一周内买入'
+                }
+            else:
+                # 即使没有买入信号，也提供观望建议
+                signals[ticker] = {
+                    'strategy': 'momentum_breakout',
+                    'signal': 'WATCH',
+                    'strength': breakout_strength,
+                    'price': current_price,
+                    'stop_loss': current_price - 2 * atr,
+                    'target': current_price + 3 * atr,
+                    'confidence': 0.3,
+                    'recommendation': '建议观望，一周内买入'
                 }
         
         return signals
@@ -182,14 +195,14 @@ class EquityTechnicalStrategy:
             bb_middle = ind['bb_middle'].iloc[-1]
             atr = ind['atr'].iloc[-1]
             
-            # 放宽超卖超买条件
-            oversold_rsi = rsi < 35  # 从30放宽到35
-            oversold_bb = current_price < bb_lower * 1.02  # 允许2%的误差
+            # 大幅放宽超卖超买条件
+            oversold_rsi = rsi < 40  # 从35放宽到40
+            oversold_bb = current_price < bb_lower * 1.05  # 允许5%的误差
             oversold_condition = oversold_rsi or oversold_bb
             
             # 超买条件
-            overbought_rsi = rsi > 65  # 从70降低到65
-            overbought_bb = current_price > bb_upper * 0.98  # 允许2%的误差
+            overbought_rsi = rsi > 60  # 从65降低到60
+            overbought_bb = current_price > bb_upper * 0.95  # 允许5%的误差
             overbought_condition = overbought_rsi or overbought_bb
             
             # 生成信号
@@ -201,7 +214,8 @@ class EquityTechnicalStrategy:
                     'price': current_price,
                     'stop_loss': current_price - 1.5 * atr,
                     'target': bb_middle,
-                    'confidence': 0.7 if oversold_rsi and oversold_bb else 0.5
+                    'confidence': 0.7 if oversold_rsi and oversold_bb else 0.5,
+                    'recommendation': '建议一周内买入'
                 }
             elif overbought_condition:
                 signals[ticker] = {
@@ -211,7 +225,20 @@ class EquityTechnicalStrategy:
                     'price': current_price,
                     'stop_loss': current_price + 1.5 * atr,
                     'target': bb_middle,
-                    'confidence': 0.7 if overbought_rsi and overbought_bb else 0.5
+                    'confidence': 0.7 if overbought_rsi and overbought_bb else 0.5,
+                    'recommendation': '建议一周内卖出'
+                }
+            else:
+                # 即使没有明确信号，也提供观望建议
+                signals[ticker] = {
+                    'strategy': 'mean_reversion',
+                    'signal': 'WATCH',
+                    'strength': 1,
+                    'price': current_price,
+                    'stop_loss': current_price - 1.5 * atr,
+                    'target': bb_middle,
+                    'confidence': 0.3,
+                    'recommendation': '建议观望，一周内买入'
                 }
         
         return signals

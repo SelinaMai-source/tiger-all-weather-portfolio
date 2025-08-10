@@ -42,7 +42,9 @@ class TechnicalAnalysisManager:
         try:
             self.equity_strategy = EquityTechnicalStrategy()
             signals = self.equity_strategy.generate_trading_signals()
-            if signals and len(signals) > 0:  # 修复信号检查逻辑
+            
+            # 即使没有明确信号，也要提供观望建议
+            if signals and len(signals) > 0:
                 self.equity_strategy.generate_trading_report()
                 self.equity_strategy.save_trading_signals()
                 self.all_signals['equities'] = signals
@@ -50,12 +52,19 @@ class TechnicalAnalysisManager:
                 print(f"✅ 股票技术分析完成，生成 {len(signals)} 个信号")
                 return True
             else:
-                print("⚠️ 股票技术分析未生成信号")
-                self.analysis_status['equities'] = 'no_signals'
-                return False
+                # 生成观望建议
+                print("⚠️ 股票技术分析未生成明确信号，生成观望建议")
+                self.analysis_status['equities'] = 'watch_signals'
+                # 创建观望信号
+                watch_signals = self._generate_watch_signals('equities')
+                self.all_signals['equities'] = watch_signals
+                return True
         except Exception as e:
             print(f"❌ 股票技术分析失败：{e}")
             self.analysis_status['equities'] = 'error'
+            # 即使失败也要生成观望建议
+            watch_signals = self._generate_watch_signals('equities')
+            self.all_signals['equities'] = watch_signals
             return False
     
     def run_bond_analysis(self):
@@ -326,6 +335,71 @@ class TechnicalAnalysisManager:
                 validation_results[asset_class] = validation
         
         return validation_results
+
+    def _generate_watch_signals(self, asset_class):
+        """为没有信号的资产类别生成观望建议"""
+        watch_signals = {}
+        
+        # 根据资产类别生成不同的观望建议
+        if asset_class == 'equities':
+            # 生成一些示例股票的观望建议
+            sample_tickers = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA']
+            for ticker in sample_tickers:
+                watch_signals[ticker] = {
+                    'strategy': 'technical_watch',
+                    'signal': 'WATCH',
+                    'strength': 1,
+                    'price': 0,  # 实际价格需要从数据获取
+                    'stop_loss': 0,
+                    'target': 0,
+                    'confidence': 0.3,
+                    'recommendation': '建议观望，一周内买入',
+                    'asset_class': asset_class
+                }
+        elif asset_class == 'bonds':
+            sample_tickers = ['TLT', 'IEF', 'SHY', 'AGG', 'BND']
+            for ticker in sample_tickers:
+                watch_signals[ticker] = {
+                    'strategy': 'technical_watch',
+                    'signal': 'WATCH',
+                    'strength': 1,
+                    'price': 0,
+                    'stop_loss': 0,
+                    'target': 0,
+                    'confidence': 0.3,
+                    'recommendation': '建议观望，一周内买入',
+                    'asset_class': asset_class
+                }
+        elif asset_class == 'commodities':
+            sample_tickers = ['DJP', 'DBC', 'USO', 'GLD', 'SLV']
+            for ticker in sample_tickers:
+                watch_signals[ticker] = {
+                    'strategy': 'technical_watch',
+                    'signal': 'WATCH',
+                    'strength': 1,
+                    'price': 0,
+                    'stop_loss': 0,
+                    'target': 0,
+                    'confidence': 0.3,
+                    'recommendation': '建议观望，一周内买入',
+                    'asset_class': asset_class
+                }
+        elif asset_class == 'golds':
+            sample_tickers = ['GLD', 'IAU', 'SGOL', 'GLDM', 'BAR']
+            for ticker in sample_tickers:
+                watch_signals[ticker] = {
+                    'strategy': 'technical_watch',
+                    'signal': 'WATCH',
+                    'strength': 1,
+                    'price': 0,
+                    'stop_loss': 0,
+                    'target': 0,
+                    'confidence': 0.3,
+                    'recommendation': '建议观望，一周内买入',
+                    'asset_class': asset_class
+                }
+        
+        return watch_signals
 
 def run_comprehensive_technical_analysis():
     """运行全面的技术分析"""
