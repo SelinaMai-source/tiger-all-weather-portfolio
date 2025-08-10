@@ -1,0 +1,28 @@
+# Streamlit Cloud 应用配置
+# 文件名: .streamlit/app.yaml
+
+app:
+  name: "Tiger All Weather Portfolio"
+  description: "全天候资产配置系统 - 宏观面、基本面、技术面分析"
+  icon: "🐯"
+  theme:
+    primaryColor: "#1f77b4"
+    backgroundColor: "#ffffff"
+    secondaryBackgroundColor: "#f0f2f6"
+    textColor: "#262730"
+
+server:
+  headless: true
+  port: 8501
+  enableCORS: false
+  enableXsrfProtection: false
+
+browser:
+  gatherUsageStats: false
+
+# 部署配置
+deployment:
+  repository: "your-username/tiger-all-weather-portfolio"
+  branch: "main"
+  mainFile: "interactive_portfolio_app.py"
+  pythonVersion: "3.9"

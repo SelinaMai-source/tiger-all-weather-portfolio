@@ -1,0 +1,15 @@
+[Unit]
+Description=Tiger All Weather Portfolio
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/tiger_all_weather_portfolio
+Environment=PATH=/root/tiger_all_weather_portfolio/venv/bin
+ExecStart=/root/tiger_all_weather_portfolio/venv/bin/streamlit run interactive_portfolio_app.py --server.port 8501 --server.address 0.0.0.0 --server.headless true
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
