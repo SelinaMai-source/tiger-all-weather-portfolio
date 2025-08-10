@@ -28,15 +28,51 @@ os.environ["YAHOO_FINANCE_ENABLED"] = "true"
 # 添加项目路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(current_dir)
+sys.path.append(os.path.join(current_dir, 'macro_analysis'))
+sys.path.append(os.path.join(current_dir, 'fundamental_analysis'))
+sys.path.append(os.path.join(current_dir, 'technical_analysis'))
+sys.path.append(os.path.join(current_dir, 'utils'))
 
 # 导入各个分析模块
 try:
-    from macro_analysis.macro_data import fetch_macro_data
-    from macro_analysis.allocation_adjust import adjust_allocation
-    from fundamental_analysis.equities.fetch_equity_data import screen_vm_candidates
-    from technical_analysis.technical_signals import TechnicalAnalysisManager
-    print("✅ 所有分析模块导入成功")
-except ImportError as e:
+    # 直接导入模块，避免路径问题
+    import importlib.util
+    
+    # 导入宏观分析模块
+    macro_data_path = os.path.join(current_dir, 'macro_analysis', 'macro_data.py')
+    if os.path.exists(macro_data_path):
+        spec = importlib.util.spec_from_file_location("macro_data", macro_data_path)
+        macro_data = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(macro_data)
+        fetch_macro_data = macro_data.fetch_macro_data
+        print("✅ 宏观分析模块导入成功")
+    else:
+        print("⚠️ 宏观分析模块文件不存在，将使用模拟数据")
+        fetch_macro_data = None
+    
+    # 导入其他模块
+    try:
+        from macro_analysis.allocation_adjust import adjust_allocation
+        print("✅ 资产配置调整模块导入成功")
+    except ImportError:
+        print("⚠️ 资产配置调整模块导入失败，将使用默认配置")
+        adjust_allocation = None
+        
+    try:
+        from fundamental_analysis.equities.fetch_equity_data import screen_vm_candidates
+        print("✅ 基本面分析模块导入成功")
+    except ImportError:
+        print("⚠️ 基本面分析模块导入失败，将使用模拟数据")
+        screen_vm_candidates = None
+        
+    try:
+        from technical_analysis.technical_signals import TechnicalAnalysisManager
+        print("✅ 技术分析模块导入成功")
+    except ImportError:
+        print("⚠️ 技术分析模块导入失败，将使用模拟数据")
+        TechnicalAnalysisManager = None
+        
+except Exception as e:
     st.error(f"❌ 模块导入失败：{e}")
     st.stop()
 
