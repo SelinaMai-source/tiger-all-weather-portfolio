@@ -30,7 +30,7 @@ def check_required_packages():
     
     required_packages = [
         'streamlit', 'pandas', 'numpy', 'plotly', 'yfinance',
-        'requests', 'beautifulsoup4', 'lxml', 'fredapi'
+        'requests', 'bs4', 'lxml', 'fredapi'
     ]
     
     missing_packages = []
