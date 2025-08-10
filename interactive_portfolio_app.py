@@ -14,60 +14,82 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
-from datetime import datetime, timedelta
-import warnings
+from plotly.subplots import make_subplots
 import os
 import sys
-warnings.filterwarnings('ignore')
+from datetime import datetime, timedelta
+import warnings
 
-# 🔑 配置API密钥
-os.environ["FRED_API_KEY"] = "550d6a640ad3000f9170f28e7157af72"
+# 设置环境变量
 os.environ["ALPHA_VANTAGE_API_KEY"] = "P27YDIBOBM1464SO"
 os.environ["YAHOO_FINANCE_ENABLED"] = "true"
 
-# 添加项目路径
+# 添加项目路径 - 更直接的路径处理
 current_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(current_dir)
-sys.path.append(os.path.join(current_dir, 'macro_analysis'))
-sys.path.append(os.path.join(current_dir, 'fundamental_analysis'))
-sys.path.append(os.path.join(current_dir, 'technical_analysis'))
-sys.path.append(os.path.join(current_dir, 'utils'))
+project_root = current_dir
+
+# 确保所有必要的路径都在sys.path中
+paths_to_add = [
+    project_root,
+    os.path.join(project_root, 'macro_analysis'),
+    os.path.join(project_root, 'fundamental_analysis'),
+    os.path.join(project_root, 'technical_analysis'),
+    os.path.join(project_root, 'utils'),
+    os.path.join(project_root, 'fundamental_analysis', 'equities'),
+    os.path.join(project_root, 'technical_analysis', 'equities'),
+    os.path.join(project_root, 'technical_analysis', 'bonds'),
+    os.path.join(project_root, 'technical_analysis', 'commodities'),
+    os.path.join(project_root, 'technical_analysis', 'golds')
+]
+
+for path in paths_to_add:
+    if path not in sys.path:
+        sys.path.insert(0, path)
+
+print(f"🔍 当前工作目录: {os.getcwd()}")
+print(f"📁 项目根目录: {project_root}")
+print(f"📂 已添加的路径: {sys.path[:5]}")
 
 # 导入各个分析模块
 try:
+    print("🚀 开始导入模块...")
+    
     # 导入宏观分析模块
     try:
         from macro_analysis.macro_data import fetch_macro_data
         print("✅ 宏观分析模块导入成功")
-    except ImportError:
-        print("⚠️ 宏观分析模块导入失败，将使用模拟数据")
+    except ImportError as e:
+        print(f"⚠️ 宏观分析模块导入失败: {e}")
         fetch_macro_data = None
     
     # 导入资产配置调整模块
     try:
         from macro_analysis.allocation_adjust import adjust_allocation
         print("✅ 资产配置调整模块导入成功")
-    except ImportError:
-        print("⚠️ 资产配置调整模块导入失败，将使用默认配置")
+    except ImportError as e:
+        print(f"⚠️ 资产配置调整模块导入失败: {e}")
         adjust_allocation = None
         
     # 导入基本面分析模块
     try:
         from fundamental_analysis.equities.fetch_equity_data import screen_vm_candidates
         print("✅ 基本面分析模块导入成功")
-    except ImportError:
-        print("⚠️ 基本面分析模块导入失败，将使用模拟数据")
+    except ImportError as e:
+        print(f"⚠️ 基本面分析模块导入失败: {e}")
         screen_vm_candidates = None
         
     # 导入技术分析模块
     try:
         from technical_analysis.technical_signals import TechnicalAnalysisManager
         print("✅ 技术分析模块导入成功")
-    except ImportError:
-        print("⚠️ 技术分析模块导入失败，将使用模拟数据")
+    except ImportError as e:
+        print(f"⚠️ 技术分析模块导入失败: {e}")
         TechnicalAnalysisManager = None
         
+    print("🎯 模块导入完成")
+        
 except Exception as e:
+    print(f"❌ 模块导入失败：{e}")
     st.error(f"❌ 模块导入失败：{e}")
     st.stop()
 
