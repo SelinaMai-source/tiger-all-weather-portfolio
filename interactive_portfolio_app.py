@@ -184,6 +184,11 @@ class CompletePortfolioSystem:
         """运行基本面分析模块"""
         with st.spinner("📊 正在筛选优质资产..."):
             try:
+                # 检查函数是否可用
+                if screen_vm_candidates is None:
+                    st.error("❌ 基本面分析模块未正确导入")
+                    return False
+                
                 self.equity_candidates = screen_vm_candidates()
                 if not self.equity_candidates.empty:
                     st.success(f"✅ 基本面分析完成，筛选出 {len(self.equity_candidates)} 只股票")
@@ -199,6 +204,11 @@ class CompletePortfolioSystem:
         """运行技术面分析模块"""
         with st.spinner("📈 正在生成技术信号..."):
             try:
+                # 检查技术分析管理器是否可用
+                if self.technical_manager is None:
+                    st.error("❌ 技术分析模块未正确导入")
+                    return False
+                
                 results = self.technical_manager.run_all_analysis()
                 success_count = sum(results.values())
                 if success_count > 0:
