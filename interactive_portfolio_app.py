@@ -19,12 +19,13 @@ import os
 import sys
 from datetime import datetime, timedelta
 import warnings
+warnings.filterwarnings('ignore')
 
 # 设置环境变量
 os.environ["ALPHA_VANTAGE_API_KEY"] = "P27YDIBOBM1464SO"
 os.environ["YAHOO_FINANCE_ENABLED"] = "true"
 
-# 添加项目路径 - 更直接的路径处理
+# 添加项目路径 - 兼容Streamlit Cloud
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = current_dir
 
@@ -46,50 +47,54 @@ for path in paths_to_add:
     if path not in sys.path:
         sys.path.insert(0, path)
 
-print(f"🔍 当前工作目录: {os.getcwd()}")
-print(f"📁 项目根目录: {project_root}")
-print(f"📂 已添加的路径: {sys.path[:5]}")
+# 调试信息
+st.write(f"🔍 当前工作目录: {os.getcwd()}")
+st.write(f"📁 项目根目录: {project_root}")
+st.write(f"📂 已添加的路径数量: {len([p for p in paths_to_add if p in sys.path])}")
 
 # 导入各个分析模块
 try:
-    print("🚀 开始导入模块...")
+    st.write("🚀 开始导入模块...")
     
     # 导入宏观分析模块
     try:
         from macro_analysis.macro_data import fetch_macro_data
-        print("✅ 宏观分析模块导入成功")
+        st.success("✅ 宏观分析模块导入成功")
     except ImportError as e:
-        print(f"⚠️ 宏观分析模块导入失败: {e}")
+        st.warning(f"⚠️ 宏观分析模块导入失败: {e}")
+        st.info("💡 宏观分析功能将不可用，但其他功能仍可正常使用")
         fetch_macro_data = None
     
     # 导入资产配置调整模块
     try:
         from macro_analysis.allocation_adjust import adjust_allocation
-        print("✅ 资产配置调整模块导入成功")
+        st.success("✅ 资产配置调整模块导入成功")
     except ImportError as e:
-        print(f"⚠️ 资产配置调整模块导入失败: {e}")
+        st.warning(f"⚠️ 资产配置调整模块导入失败: {e}")
+        st.info("💡 资产配置调整功能将不可用")
         adjust_allocation = None
         
     # 导入基本面分析模块
     try:
-        from fundamental_analysis.equities.fetch_equity_data import screen_vm_candidates
-        print("✅ 基本面分析模块导入成功")
+        from fundamental_analysis.fundamental_manager import FundamentalAnalysisManager
+        st.success("✅ 基本面分析模块导入成功")
     except ImportError as e:
-        print(f"⚠️ 基本面分析模块导入失败: {e}")
-        screen_vm_candidates = None
+        st.warning(f"⚠️ 基本面分析模块导入失败: {e}")
+        st.info("💡 基本面分析功能将不可用，但其他功能仍可正常使用")
+        FundamentalAnalysisManager = None
         
     # 导入技术分析模块
     try:
         from technical_analysis.technical_signals import TechnicalAnalysisManager
-        print("✅ 技术分析模块导入成功")
+        st.success("✅ 技术分析模块导入成功")
     except ImportError as e:
-        print(f"⚠️ 技术分析模块导入失败: {e}")
+        st.warning(f"⚠️ 技术分析模块导入失败: {e}")
+        st.info("💡 技术分析功能将不可用，但其他功能仍可正常使用")
         TechnicalAnalysisManager = None
         
-    print("🎯 模块导入完成")
+    st.success("🎯 模块导入完成")
         
 except Exception as e:
-    print(f"❌ 模块导入失败：{e}")
     st.error(f"❌ 模块导入失败：{e}")
     st.stop()
 
@@ -202,16 +207,30 @@ class CompletePortfolioSystem:
         with st.spinner("📊 正在筛选优质资产..."):
             try:
                 # 检查函数是否可用
-                if screen_vm_candidates is None:
+                if FundamentalAnalysisManager is None:
                     st.error("❌ 基本面分析模块未正确导入")
                     return False
                 
-                self.equity_candidates = screen_vm_candidates()
-                if not self.equity_candidates.empty:
-                    st.success(f"✅ 基本面分析完成，筛选出 {len(self.equity_candidates)} 只股票")
-                    return True
+                # 创建基本面分析管理器实例
+                fundamental_manager = FundamentalAnalysisManager()
+                success = fundamental_manager.run_equity_analysis()
+                
+                if success:
+                    # 获取选中的股票
+                    selected_equities = fundamental_manager.get_selected_tickers('equities')
+                    if selected_equities:
+                        # 创建DataFrame
+                        self.equity_candidates = pd.DataFrame({
+                            'ticker': selected_equities,
+                            'selected_date': datetime.now().strftime('%Y-%m-%d')
+                        })
+                        st.success(f"✅ 基本面分析完成，筛选出 {len(self.equity_candidates)} 只股票")
+                        return True
+                    else:
+                        st.warning("⚠️ 基本面分析未返回股票结果")
+                        return False
                 else:
-                    st.warning("⚠️ 基本面分析未返回结果")
+                    st.error("❌ 基本面分析执行失败")
                     return False
             except Exception as e:
                 st.error(f"❌ 基本面分析失败：{e}")
@@ -608,14 +627,73 @@ def main():
         # 快速分析按钮
         if st.button("🚀 运行快速分析", type="primary"):
             with st.spinner("正在运行分析..."):
-                if run_macro:
-                    system.run_macro_analysis()
-                if run_fundamental:
-                    system.run_fundamental_analysis()
-                if run_technical:
-                    system.run_technical_analysis()
-            
-            st.success("✅ 快速分析完成！")
+                analysis_results = {}
+                
+                # 运行宏观分析
+                if run_macro and fetch_macro_data is not None:
+                    try:
+                        macro_success = system.run_macro_analysis()
+                        if macro_success:
+                            analysis_results['macro'] = "✅ 宏观分析完成"
+                        else:
+                            analysis_results['macro'] = "❌ 宏观分析失败"
+                    except Exception as e:
+                        analysis_results['macro'] = f"❌ 宏观分析异常: {str(e)[:50]}"
+                elif run_macro:
+                    analysis_results['macro'] = "⚠️ 宏观分析模块不可用"
+                else:
+                    analysis_results['macro'] = "⏭️ 跳过宏观分析"
+                
+                # 运行基本面分析
+                if run_fundamental and FundamentalAnalysisManager is not None:
+                    try:
+                        fundamental_success = system.run_fundamental_analysis()
+                        if fundamental_success:
+                            analysis_results['fundamental'] = "✅ 基本面分析完成"
+                        else:
+                            analysis_results['fundamental'] = "❌ 基本面分析失败"
+                    except Exception as e:
+                        analysis_results['fundamental'] = f"❌ 基本面分析异常: {str(e)[:50]}"
+                elif run_fundamental:
+                    analysis_results['fundamental'] = "⚠️ 基本面分析模块不可用"
+                else:
+                    analysis_results['fundamental'] = "⏭️ 跳过基本面分析"
+                
+                # 运行技术分析
+                if run_technical and TechnicalAnalysisManager is not None:
+                    try:
+                        technical_success = system.run_technical_analysis()
+                        if technical_success:
+                            analysis_results['technical'] = "✅ 技术分析完成"
+                        else:
+                            analysis_results['technical'] = "⚠️ 技术分析未生成有效信号"
+                    except Exception as e:
+                        analysis_results['fundamental'] = f"❌ 技术分析异常: {str(e)[:50]}"
+                elif run_technical:
+                    analysis_results['technical'] = "⚠️ 技术分析模块不可用"
+                else:
+                    analysis_results['technical'] = "⏭️ 跳过技术分析"
+                
+                # 显示分析结果
+                st.subheader("📊 分析结果")
+                for analysis_type, result in analysis_results.items():
+                    if "✅" in result:
+                        st.success(result)
+                    elif "❌" in result:
+                        st.error(result)
+                    elif "⚠️" in result:
+                        st.warning(result)
+                    else:
+                        st.info(result)
+                
+                # 总体状态
+                success_count = sum(1 for result in analysis_results.values() if "✅" in result)
+                total_count = len([r for r in analysis_results.values() if "⏭️" not in r])
+                
+                if success_count > 0:
+                    st.success(f"🎉 快速分析完成！{success_count}/{total_count} 个模块成功")
+                else:
+                    st.warning("⚠️ 快速分析完成，但没有模块成功执行")
     
     # 宏观分析标签页
     with tab2:

@@ -42,7 +42,7 @@ class TechnicalAnalysisManager:
         try:
             self.equity_strategy = EquityTechnicalStrategy()
             signals = self.equity_strategy.generate_trading_signals()
-            if signals and not signals.empty:
+            if signals and len(signals) > 0:  # 修复信号检查逻辑
                 self.equity_strategy.generate_trading_report()
                 self.equity_strategy.save_trading_signals()
                 self.all_signals['equities'] = signals
@@ -64,7 +64,7 @@ class TechnicalAnalysisManager:
         try:
             self.bond_strategy = BondTechnicalStrategy()
             signals = self.bond_strategy.generate_trading_signals()
-            if signals and not signals.empty:
+            if signals and len(signals) > 0:  # 修复信号检查逻辑
                 self.bond_strategy.generate_trading_report()
                 self.bond_strategy.save_trading_signals()
                 self.all_signals['bonds'] = signals
@@ -86,7 +86,7 @@ class TechnicalAnalysisManager:
         try:
             self.commodity_strategy = CommodityTechnicalStrategy()
             signals = self.commodity_strategy.generate_trading_signals()
-            if signals and not signals.empty:
+            if signals and len(signals) > 0:  # 修复信号检查逻辑
                 self.commodity_strategy.generate_trading_report()
                 self.commodity_strategy.save_trading_signals()
                 self.all_signals['commodities'] = signals
@@ -108,7 +108,7 @@ class TechnicalAnalysisManager:
         try:
             self.gold_strategy = GoldTechnicalStrategy()
             signals = self.gold_strategy.generate_trading_signals()
-            if signals and not signals.empty:
+            if signals and len(signals) > 0:  # 修复信号检查逻辑
                 self.gold_strategy.generate_trading_report()
                 self.gold_strategy.save_trading_signals()
                 self.all_signals['golds'] = signals
@@ -146,12 +146,12 @@ class TechnicalAnalysisManager:
         summary = {}
         
         for asset_class, signals in self.all_signals.items():
-            if signals is not None and not signals.empty:
+            if signals is not None and len(signals) > 0:  # 修复信号检查逻辑
                 summary[asset_class] = {
                     'count': len(signals),
-                    'buy_signals': len(signals[signals['signal'] == 'BUY']) if 'signal' in signals.columns else 0,
-                    'sell_signals': len(signals[signals['signal'] == 'SELL']) if 'signal' in signals.columns else 0,
-                    'hold_signals': len(signals[signals['signal'] == 'HOLD']) if 'signal' in signals.columns else 0,
+                    'buy_signals': len([s for s in signals.values() if s.get('signal') == 'BUY']) if isinstance(signals, dict) else 0,
+                    'sell_signals': len([s for s in signals.values() if s.get('signal') == 'SELL']) if isinstance(signals, dict) else 0,
+                    'hold_signals': len([s for s in signals.values() if s.get('signal') == 'HOLD']) if isinstance(signals, dict) else 0,
                     'latest_update': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 }
             else:
@@ -167,16 +167,24 @@ class TechnicalAnalysisManager:
     
     def get_asset_class_signals(self, asset_class):
         """获取特定资产类别的信号"""
-        return self.all_signals.get(asset_class, pd.DataFrame())
+        signals = self.all_signals.get(asset_class, {})
+        if signals and len(signals) > 0:
+            # 转换为DataFrame格式以便显示
+            if isinstance(signals, dict):
+                df = pd.DataFrame.from_dict(signals, orient='index')
+                df.index.name = 'ticker'
+                df.reset_index(inplace=True)
+                return df
+        return pd.DataFrame()
     
     def filter_signals_by_strength(self, min_strength=0.7):
         """根据信号强度过滤信号"""
         filtered_signals = {}
         
         for asset_class, signals in self.all_signals.items():
-            if signals is not None and not signals.empty and 'strength' in signals.columns:
-                strong_signals = signals[signals['strength'] >= min_strength]
-                if not strong_signals.empty:
+            if signals is not None and len(signals) > 0 and isinstance(signals, dict):
+                strong_signals = {k: v for k, v in signals.items() if v.get('strength', 0) >= min_strength}
+                if strong_signals:
                     filtered_signals[asset_class] = strong_signals
         
         return filtered_signals
@@ -186,10 +194,13 @@ class TechnicalAnalysisManager:
         all_signals_list = []
         
         for asset_class, signals in self.all_signals.items():
-            if signals is not None and not signals.empty:
-                signals_copy = signals.copy()
-                signals_copy['asset_class'] = asset_class
-                all_signals_list.append(signals_copy)
+            if signals is not None and len(signals) > 0 and isinstance(signals, dict):
+                # 转换为DataFrame格式
+                signals_df = pd.DataFrame.from_dict(signals, orient='index')
+                signals_df.index.name = 'ticker'
+                signals_df.reset_index(inplace=True)
+                signals_df['asset_class'] = asset_class
+                all_signals_list.append(signals_df)
         
         if all_signals_list:
             combined_signals = pd.concat(all_signals_list, ignore_index=True)
@@ -214,16 +225,26 @@ class TechnicalAnalysisManager:
         
         # 为每个资产类别生成详细报告
         for asset_class in ['equities', 'bonds', 'commodities', 'golds']:
-            signals = self.get_asset_class_signals(asset_class)
-            if not signals.empty:
+            signals = self.all_signals.get(asset_class, {})
+            if signals and len(signals) > 0 and isinstance(signals, dict):
+                # 计算信号分布
+                signal_counts = {}
+                strength_values = []
+                for signal_data in signals.values():
+                    signal_type = signal_data.get('signal', 'UNKNOWN')
+                    signal_counts[signal_type] = signal_counts.get(signal_type, 0) + 1
+                    
+                    if 'strength' in signal_data:
+                        strength_values.append(signal_data['strength'])
+                
                 report['asset_class_signals'][asset_class] = {
                     'total_signals': len(signals),
-                    'signal_distribution': signals['signal'].value_counts().to_dict() if 'signal' in signals.columns else {},
+                    'signal_distribution': signal_counts,
                     'strength_stats': {
-                        'mean': signals['strength'].mean() if 'strength' in signals.columns else 0,
-                        'max': signals['strength'].max() if 'strength' in signals.columns else 0,
-                        'min': signals['strength'].min() if 'strength' in signals.columns else 0
-                    } if 'strength' in signals.columns else {}
+                        'mean': np.mean(strength_values) if strength_values else 0,
+                        'max': np.max(strength_values) if strength_values else 0,
+                        'min': np.min(strength_values) if strength_values else 0
+                    } if strength_values else {}
                 }
         
         return report
@@ -269,12 +290,12 @@ class TechnicalAnalysisManager:
         }
         
         for asset_class, signals in self.all_signals.items():
-            if signals is not None and not signals.empty:
+            if signals is not None and len(signals) > 0 and isinstance(signals, dict):
                 asset_summary = {
                     'count': len(signals),
-                    'buy': len(signals[signals['signal'] == 'BUY']) if 'signal' in signals.columns else 0,
-                    'sell': len(signals[signals['signal'] == 'SELL']) if 'signal' in signals.columns else 0,
-                    'hold': len(signals[signals['signal'] == 'HOLD']) if 'signal' in signals.columns else 0
+                    'buy': len([s for s in signals.values() if s.get('signal') == 'BUY']),
+                    'sell': len([s for s in signals.values() if s.get('signal') == 'SELL']),
+                    'hold': len([s for s in signals.values() if s.get('signal') == 'HOLD'])
                 }
                 
                 summary['asset_class_breakdown'][asset_class] = asset_summary
@@ -295,12 +316,12 @@ class TechnicalAnalysisManager:
         validation_results = {}
         
         for asset_class, signals in self.all_signals.items():
-            if signals is not None and not signals.empty:
+            if signals is not None and len(signals) > 0 and isinstance(signals, dict):
                 validation = {
                     'data_quality': 'good' if len(signals) > 0 else 'poor',
-                    'signal_coverage': 'complete' if 'signal' in signals.columns else 'incomplete',
-                    'strength_coverage': 'complete' if 'strength' in signals.columns else 'incomplete',
-                    'timestamp_coverage': 'complete' if 'timestamp' in signals.columns else 'incomplete'
+                    'signal_coverage': 'complete' if all('signal' in s for s in signals.values()) else 'incomplete',
+                    'strength_coverage': 'complete' if all('strength' in s for s in signals.values()) else 'incomplete',
+                    'timestamp_coverage': 'complete' if all('timestamp' in s for s in signals.values()) else 'incomplete'
                 }
                 validation_results[asset_class] = validation
         
