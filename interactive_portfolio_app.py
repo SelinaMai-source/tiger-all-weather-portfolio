@@ -20,6 +20,11 @@ import os
 import sys
 warnings.filterwarnings('ignore')
 
+# 🔑 配置API密钥
+os.environ["FRED_API_KEY"] = "550d6a640ad3000f9170f28e7157af72"
+os.environ["ALPHA_VANTAGE_API_KEY"] = "P27YDIBOBM1464SO"
+os.environ["YAHOO_FINANCE_ENABLED"] = "true"
+
 # 添加项目路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(current_dir)
