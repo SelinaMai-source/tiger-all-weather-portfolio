@@ -5,6 +5,8 @@ developmentMode = false
 headless = true
 enableCORS = false
 enableXsrfProtection = false
+maxUploadSize = 200
+fileWatcherType = "auto"
 
 [browser]
 gatherUsageStats = false
@@ -15,3 +17,6 @@ backgroundColor = "#ffffff"
 secondaryBackgroundColor = "#f0f2f6"
 textColor = "#262730"
 font = "sans serif"
+
+[logger]
+level = "info"
