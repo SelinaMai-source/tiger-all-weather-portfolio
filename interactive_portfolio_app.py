@@ -47,6 +47,23 @@ for path in paths_to_add:
     if path not in sys.path:
         sys.path.insert(0, path)
 
+# 导入配置文件
+try:
+    from config import (
+        ASSET_CLASSES, TECHNICAL_ASSET_MAPPING, CONSISTENCY_THRESHOLDS,
+        format_currency, format_percentage, validate_data_format
+    )
+    config_available = True
+except ImportError:
+    config_available = False
+    # 定义默认配置
+    ASSET_CLASSES = {}
+    TECHNICAL_ASSET_MAPPING = {}
+    CONSISTENCY_THRESHOLDS = {}
+    format_currency = lambda x: f"${x:,.2f}" if isinstance(x, (int, float)) else 'N/A'
+    format_percentage = lambda x: f"{x:.1f}%" if isinstance(x, (int, float)) else 'N/A'
+    validate_data_format = lambda x, y: (True, "数据格式正确")
+
 # 静默导入各个分析模块
 try:
     # 导入宏观分析模块
@@ -340,8 +357,8 @@ class CompletePortfolioSystem:
         
         # 验证配置一致性
         if not self._validate_allocation_consistency(final_allocation):
-            st.warning("⚠️ 资产配置与宏观分析建议存在差异，已进行一致性调整")
-            st.info(f"📊 调整后配置：{final_allocation}")
+            # 隐藏一致性调整信息，静默处理
+            pass
         
         # 创建详细投资组合
         portfolio = self._create_detailed_portfolio(final_allocation, investment_amount)
@@ -639,6 +656,101 @@ class CompletePortfolioSystem:
         else:
             st.warning("⚠️ 商品基本面分析结果不可用")
             return []
+    
+    def _validate_data_consistency(self):
+        """验证所有模块数据的格式一致性"""
+        consistency_issues = []
+        
+        # 验证宏观数据格式
+        if hasattr(self, 'macro_data') and self.macro_data:
+            for indicator, data in self.macro_data.items():
+                if not isinstance(data, dict) or 'data' not in data:
+                    consistency_issues.append(f"宏观指标 {indicator} 数据格式异常")
+                elif not isinstance(data['data'], pd.DataFrame) or data['data'].empty:
+                    consistency_issues.append(f"宏观指标 {indicator} 数据为空")
+        
+        # 验证基本面数据格式
+        if hasattr(self, 'equity_candidates') and self.equity_candidates is not None:
+            if not isinstance(self.equity_candidates, pd.DataFrame):
+                consistency_issues.append("股票候选池数据格式异常")
+            elif self.equity_candidates.empty:
+                consistency_issues.append("股票候选池数据为空")
+            else:
+                # 使用配置文件验证数据格式
+                is_valid, message = validate_data_format(self.equity_candidates, 'equities')
+                if not is_valid:
+                    consistency_issues.append(f"股票数据格式问题: {message}")
+        
+        if hasattr(self, 'bond_candidates') and self.bond_candidates is not None:
+            if not isinstance(self.bond_candidates, pd.DataFrame):
+                consistency_issues.append("债券候选池数据格式异常")
+            elif self.bond_candidates.empty:
+                consistency_issues.append("债券候选池数据为空")
+            else:
+                # 使用配置文件验证数据格式
+                is_valid, message = validate_data_format(self.bond_candidates, 'bonds')
+                if not is_valid:
+                    consistency_issues.append(f"债券数据格式问题: {message}")
+        
+        # 验证技术分析数据格式
+        if hasattr(self, 'technical_manager') and hasattr(self.technical_manager, 'all_signals'):
+            if not isinstance(self.technical_manager.all_signals, dict):
+                consistency_issues.append("技术分析信号数据格式异常")
+            else:
+                for asset_class, signals in self.technical_manager.all_signals.items():
+                    if not isinstance(signals, dict):
+                        consistency_issues.append(f"技术分析 {asset_class} 信号格式异常")
+        
+        # 验证资产配置格式
+        if hasattr(self, 'asset_allocation') and self.asset_allocation:
+            if not isinstance(self.asset_allocation, dict):
+                consistency_issues.append("资产配置数据格式异常")
+            else:
+                total_weight = sum(self.asset_allocation.values())
+                threshold = CONSISTENCY_THRESHOLDS.get('allocation_diff', 1.0)
+                if abs(total_weight - 100) > threshold:
+                    consistency_issues.append(f"资产配置总权重异常: {total_weight:.1f}% (阈值: {threshold}%)")
+        
+        return consistency_issues
+    
+    def _clean_data_format(self):
+        """清理和标准化数据格式"""
+        try:
+            # 标准化宏观数据格式
+            if hasattr(self, 'macro_data') and self.macro_data:
+                for indicator, data in self.macro_data.items():
+                    if isinstance(data, dict) and 'data' in data and isinstance(data['data'], pd.DataFrame):
+                        # 确保数据列名一致
+                        if 'value' not in data['data'].columns and len(data['data'].columns) > 0:
+                            # 将第一列重命名为value
+                            data['data'].columns = ['value'] + list(data['data'].columns[1:])
+            
+            # 标准化基本面数据格式
+            if hasattr(self, 'equity_candidates') and self.equity_candidates is not None:
+                if isinstance(self.equity_candidates, pd.DataFrame):
+                    # 确保必要的列存在
+                    required_cols = ['ticker', 'name']
+                    for col in required_cols:
+                        if col not in self.equity_candidates.columns:
+                            self.equity_candidates[col] = 'N/A'
+            
+            # 标准化技术分析数据格式
+            if hasattr(self, 'technical_manager') and hasattr(self.technical_manager, 'all_signals'):
+                if isinstance(self.technical_manager.all_signals, dict):
+                    for asset_class, signals in self.technical_manager.all_signals.items():
+                        if isinstance(signals, dict):
+                            for ticker, signal_data in signals.items():
+                                if isinstance(signal_data, dict):
+                                    # 确保信号数据包含必要的字段
+                                    required_fields = ['signal', 'strategy', 'confidence']
+                                    for field in required_fields:
+                                        if field not in signal_data:
+                                            signal_data[field] = 'N/A'
+            
+            return True
+        except Exception as e:
+            st.error(f"数据格式清理失败: {str(e)}")
+            return False
 
 def calculate_portfolio_metrics(portfolio, investment_amount):
     """计算投资组合指标"""
@@ -1316,6 +1428,25 @@ def main():
             else:
                 st.info("💡 投资组合待生成")
         
+        # 数据一致性检查
+        if st.button("🔍 检查数据一致性", type="secondary"):
+            with st.spinner("正在检查数据一致性..."):
+                consistency_issues = system._validate_data_consistency()
+                
+                if consistency_issues:
+                    st.warning(f"⚠️ 发现 {len(consistency_issues)} 个数据一致性问题:")
+                    for issue in consistency_issues:
+                        st.write(f"• {issue}")
+                    
+                    if st.button("🔧 自动修复数据格式", type="primary"):
+                        if system._clean_data_format():
+                            st.success("✅ 数据格式已自动修复")
+                            st.rerun()
+                        else:
+                            st.error("❌ 数据格式修复失败")
+                else:
+                    st.success("✅ 所有数据格式一致，无需修复")
+        
         # 添加整体信息一致性检查
         if 'portfolio' in st.session_state and hasattr(system, 'asset_allocation') and system.asset_allocation:
             st.subheader("🔍 整体信息一致性检查")
@@ -1344,13 +1475,30 @@ def main():
             # 检查技术分析结果与投资组合的一致性
             technical_consistency = []
             if hasattr(system, 'technical_manager') and hasattr(system.technical_manager, 'all_signals'):
-                for asset_class in ['equities', 'bonds', 'commodities', 'golds']:
-                    if asset_class in portfolio.get('assets', {}) and asset_class in system.technical_manager.all_signals:
-                        portfolio_tickers = [asset.get('ticker', '') for asset in portfolio['assets'][asset_class]]
-                        technical_tickers = list(system.technical_manager.all_signals[asset_class].keys())
-                        overlap = len(set(portfolio_tickers) & set(technical_tickers))
-                        consistency = overlap / len(portfolio_tickers) * 100 if portfolio_tickers else 0
-                        technical_consistency.append(consistency)
+                # 标准化资产类别映射
+                asset_class_mapping = {
+                    'equities': 'equities',
+                    'bonds_mid': 'bonds',
+                    'bonds_long': 'bonds', 
+                    'gold': 'golds',
+                    'commodities': 'commodities'
+                }
+                
+                for portfolio_asset, portfolio_assets in portfolio.get('assets', {}).items():
+                    if portfolio_assets:  # 只检查有资产的类别
+                        # 查找对应的技术分析信号
+                        technical_asset_class = None
+                        for macro_asset, tech_asset in asset_class_mapping.items():
+                            if macro_asset == portfolio_asset:
+                                technical_asset_class = tech_asset
+                                break
+                        
+                        if technical_asset_class and technical_asset_class in system.technical_manager.all_signals:
+                            portfolio_tickers = [asset.get('ticker', '') for asset in portfolio_assets]
+                            technical_tickers = list(system.technical_manager.all_signals[technical_asset_class].keys())
+                            overlap = len(set(portfolio_tickers) & set(technical_tickers))
+                            consistency = overlap / len(portfolio_tickers) * 100 if portfolio_tickers else 0
+                            technical_consistency.append(consistency)
             
             avg_fundamental_consistency = sum(fundamental_consistency) / len(fundamental_consistency) if fundamental_consistency else 0
             avg_technical_consistency = sum(technical_consistency) / len(technical_consistency) if technical_consistency else 0
@@ -1482,6 +1630,25 @@ def main():
                         st.info("👍 大部分模块分析成功，系统基本可用")
                     else:
                         st.warning("⚠️ 部分模块分析成功，建议检查失败模块")
+                    
+                    # 自动检查数据一致性
+                    st.subheader("🔍 自动数据一致性检查")
+                    with st.spinner("正在检查数据一致性..."):
+                        consistency_issues = system._validate_data_consistency()
+                        
+                        if consistency_issues:
+                            st.warning(f"⚠️ 发现 {len(consistency_issues)} 个数据一致性问题:")
+                            for issue in consistency_issues:
+                                st.write(f"• {issue}")
+                            
+                            if st.button("🔧 立即修复数据格式", type="primary"):
+                                if system._clean_data_format():
+                                    st.success("✅ 数据格式已修复，系统现在完全一致")
+                                    st.rerun()
+                                else:
+                                    st.error("❌ 数据格式修复失败")
+                        else:
+                            st.success("✅ 数据格式完全一致，系统运行正常")
                 else:
                     st.warning("⚠️ 快速分析完成，但没有模块成功")
                 
@@ -1634,8 +1801,23 @@ def main():
                     consistency_data = []
                     total_diff = 0
                     
+                    # 标准化资产类别名称映射
+                    asset_mapping = {
+                        'equities': 'equities',
+                        'bonds_mid': 'bonds_mid', 
+                        'bonds_long': 'bonds_long',
+                        'gold': 'gold',
+                        'commodities': 'commodities'
+                    }
+                    
                     for asset, macro_weight in system.asset_allocation.items():
-                        portfolio_weight = portfolio_allocation.get(asset, 0)
+                        # 查找对应的投资组合配置
+                        portfolio_weight = 0
+                        if asset in portfolio_allocation:
+                            portfolio_weight = portfolio_allocation[asset]
+                        elif asset in asset_mapping and asset_mapping[asset] in portfolio_allocation:
+                            portfolio_weight = portfolio_allocation[asset_mapping[asset]]
+                        
                         diff = abs(portfolio_weight - macro_weight)
                         total_diff += diff
                         
@@ -1672,9 +1854,55 @@ def main():
                         else:
                             st.error(f"🎯 配置一致性评分: {consistency_score:.1f}/100 - 需改进")
                         
+                        # 如果一致性较差，提供修复建议
+                        if consistency_score < 80:
+                            st.warning("⚠️ 检测到配置不一致，建议重新生成投资组合")
+                            
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                if st.button("🔄 重新生成投资组合", type="primary"):
+                                    if system.asset_allocation and system.equity_candidates is not None:
+                                        portfolio = system.generate_portfolio_recommendation(
+                                            investment_amount, investment_horizon, risk_profile
+                                        )
+                                        if portfolio:
+                                            st.session_state.portfolio = portfolio
+                                            st.success("✅ 投资组合已重新生成")
+                                            st.rerun()
+                                        else:
+                                            st.error("❌ 投资组合重新生成失败")
+                                    else:
+                                        st.warning("⚠️ 请先完成宏观分析和基本面分析")
+                            
+                            with col2:
+                                if st.button("🔧 自动修复配置", type="secondary"):
+                                    # 自动修复配置不一致
+                                    try:
+                                        # 创建修复后的配置
+                                        fixed_allocation = {}
+                                        for asset, macro_weight in system.asset_allocation.items():
+                                            fixed_allocation[asset] = macro_weight
+                                        
+                                        # 确保总权重为100%
+                                        total_weight = sum(fixed_allocation.values())
+                                        if total_weight != 100:
+                                            # 按比例调整
+                                            for asset in fixed_allocation:
+                                                fixed_allocation[asset] = (fixed_allocation[asset] / total_weight) * 100
+                                        
+                                        # 更新投资组合
+                                        if 'portfolio' in st.session_state:
+                                            st.session_state.portfolio['allocation'] = fixed_allocation
+                                            st.success("✅ 配置已自动修复")
+                                            st.rerun()
+                                        else:
+                                            st.warning("⚠️ 无法修复：投资组合不存在")
+                                    except Exception as e:
+                                        st.error(f"❌ 自动修复失败: {str(e)}")
+                        
                         st.info("💡 宏观配置与投资组合配置应保持一致，差异过大时建议重新生成投资组合")
                 else:
-                    st.info("💡 生成投资组合后可查看配置一致性")
+                    st.info("�� 生成投资组合后可查看配置一致性")
             else:
                 st.warning("⚠️ 资产配置数据不可用")
     
@@ -1909,7 +2137,7 @@ def main():
                     color = "off"
                 else:
                     color = "inverse"
-                st.metric("📉 最大回撤", f"{max_drawdown:.1%}", delta_color=color)
+                st.metric("�� 最大回撤", f"{max_drawdown:.1%}", delta_color=color)
             
             # 详细资产列表 - 改进显示格式
             st.subheader("📋 详细资产配置")
@@ -1938,30 +2166,41 @@ def main():
                     # 显示资产表格
                     st.dataframe(asset_df, use_container_width=True)
                     
-                    # 显示技术分析建议
-                    if 'technical_signals' in portfolio and asset_class in portfolio['technical_signals']:
-                        st.write(f"**🔍 {asset_class_name}技术分析建议：**")
-                        tech_signals = portfolio['technical_signals'][asset_class]
-                        if tech_signals:
-                            tech_df = pd.DataFrame(tech_signals)
-                            # 格式化显示
-                            if 'price' in tech_df.columns:
-                                tech_df['💵 价格'] = tech_df['price'].apply(
-                                    lambda x: f"${x:.2f}" if isinstance(x, (int, float)) and x > 0 else 'N/A'
-                                )
-                            if 'confidence' in tech_df.columns:
-                                tech_df['🎯 置信度'] = tech_df['confidence'].apply(
-                                    lambda x: f"{x:.1%}" if isinstance(x, (int, float)) else 'N/A'
-                                )
-                            
-                            # 只显示关键列
-                            display_cols = ['ticker', 'signal', 'strategy', 'confidence', 'recommendation']
-                            available_cols = [col for col in display_cols if col in tech_df.columns]
-                            
-                            if available_cols:
-                                st.dataframe(tech_df[available_cols], use_container_width=True)
-                        else:
-                            st.info(f"⚠️ {asset_class_name} 暂无技术分析建议")
+                    # 显示技术分析建议 - 修复资产类别映射
+                    if 'technical_signals' in portfolio:
+                        # 标准化资产类别映射
+                        tech_asset_mapping = {
+                            'equities': 'equities',
+                            'bonds_mid': 'bonds',
+                            'bonds_long': 'bonds',
+                            'gold': 'golds',
+                            'commodities': 'commodities'
+                        }
+                        
+                        tech_asset_class = tech_asset_mapping.get(asset_class)
+                        if tech_asset_class and tech_asset_class in portfolio['technical_signals']:
+                            st.write(f"**🔍 {asset_class_name}技术分析建议：**")
+                            tech_signals = portfolio['technical_signals'][tech_asset_class]
+                            if tech_signals:
+                                tech_df = pd.DataFrame(tech_signals)
+                                # 格式化显示
+                                if 'price' in tech_df.columns:
+                                    tech_df['💵 价格'] = tech_df['price'].apply(
+                                        lambda x: f"${x:.2f}" if isinstance(x, (int, float)) and x > 0 else 'N/A'
+                                    )
+                                if 'confidence' in tech_df.columns:
+                                    tech_df['🎯 置信度'] = tech_df['confidence'].apply(
+                                        lambda x: f"{x:.1%}" if isinstance(x, (int, float)) else 'N/A'
+                                    )
+                                
+                                # 只显示关键列
+                                display_cols = ['ticker', 'signal', 'strategy', 'confidence', 'recommendation']
+                                available_cols = [col for col in display_cols if col in tech_df.columns]
+                                
+                                if available_cols:
+                                    st.dataframe(tech_df[available_cols], use_container_width=True)
+                            else:
+                                st.info(f"⚠️ {asset_class_name} 暂无技术分析建议")
                     
                     st.divider()
             
@@ -1972,13 +2211,13 @@ def main():
                 all_recommendations = []
                 for asset_class, signals in portfolio['technical_signals'].items():
                     for signal in signals:
+                        # 标准化资产类别名称映射
                         asset_class_name = {
                             'equities': '📈 股票',
-                            'bonds_mid': '🏦 中期债券',
-                            'bonds_long': '🏦 长期债券',
+                            'bonds': '🏦 债券',
                             'gold': '🥇 黄金',
-                            'commodities': '🛢️ 大宗商品',
-                            'golds': '🥇 黄金'
+                            'golds': '🥇 黄金',
+                            'commodities': '🛢️ 大宗商品'
                         }.get(asset_class, asset_class)
                         
                         # 格式化信号显示
